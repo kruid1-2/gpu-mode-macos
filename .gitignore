@@ -1,5 +1,66 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Swift Package Manager
 .build/
 .swiftpm/
-dist/
+Package.resolved.bak
+
+# Xcode local state
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# App bundles and build products
 *.app/
-.DS_Store
+*.dSYM/
+*.xcarchive/
+dist/
+release/
+*.ipa
+*.pkg
+*.dmg
+*.zip
+
+# Logs and diagnostics
+*.log
+logs/
+*.crash
+*.ips
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.codex/
+
+# Signing, provisioning, and notarization secrets
+*.p8
+*.p12
+*.pem
+*.key
+*.cer
+*.cert
+*.crt
+*.der
+*.mobileprovision
+*.provisionprofile
+*.certSigningRequest
+*.notarytool
+notarytool-profile*.json
+notarization-*.json
+ExportOptions.plist
