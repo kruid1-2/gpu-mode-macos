@@ -2,3 +2,4 @@
 .swiftpm/
 dist/
 *.app/
+.DS_Store

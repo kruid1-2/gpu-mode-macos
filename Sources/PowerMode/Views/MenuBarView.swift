@@ -21,6 +21,29 @@ struct MenuBarView: View {
             Text(shortMenuTitle(service.statusMessage))
         }
 
+        if service.pendingModeForAuthorization != nil {
+            Divider()
+
+            Button("启用特权助手") {
+                Task {
+                    await service.enableHelper()
+                }
+            }
+            .disabled(service.isLoading)
+
+            Button("仅本次授权") {
+                Task {
+                    await service.useLegacyAuthorizationForPendingMode()
+                }
+            }
+            .disabled(service.isLoading)
+
+            Button("取消") {
+                service.cancelPendingAuthorizationChoice()
+            }
+            .disabled(service.isLoading)
+        }
+
         Divider()
 
         Text("切换模式")

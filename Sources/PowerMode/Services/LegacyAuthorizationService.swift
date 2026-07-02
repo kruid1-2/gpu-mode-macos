@@ -1,6 +1,6 @@
 import Foundation
 
-enum PrivilegedCommandError: LocalizedError, Sendable {
+enum LegacyAuthorizationError: LocalizedError, Sendable {
     case unsupportedMode
     case userCancelled
     case commandFailed
@@ -17,7 +17,7 @@ enum PrivilegedCommandError: LocalizedError, Sendable {
     }
 }
 
-final class PrivilegedCommandService: Sendable {
+final class LegacyAuthorizationService: Sendable {
     private let processRunner: ProcessRunner
 
     init(processRunner: ProcessRunner) {
@@ -34,7 +34,7 @@ final class PrivilegedCommandService: Sendable {
         case .automatic:
             fixedCommand = "/usr/bin/pmset -a gpuswitch 2"
         case .unknown:
-            throw PrivilegedCommandError.unsupportedMode
+            throw LegacyAuthorizationError.unsupportedMode
         }
 
         let appleScript = "do shell script \"\(fixedCommand)\" with administrator privileges"
@@ -50,9 +50,9 @@ final class PrivilegedCommandService: Sendable {
             if diagnostic.localizedCaseInsensitiveContains("User canceled")
                 || diagnostic.contains("-128")
                 || diagnostic.contains("用户已取消") {
-                throw PrivilegedCommandError.userCancelled
+                throw LegacyAuthorizationError.userCancelled
             }
-            throw PrivilegedCommandError.commandFailed
+            throw LegacyAuthorizationError.commandFailed
         }
     }
 }

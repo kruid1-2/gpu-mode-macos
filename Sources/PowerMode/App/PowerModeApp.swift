@@ -15,12 +15,16 @@ struct GPUModeApp: App {
     init() {
         let runner = ProcessRunner()
         let hardwareInfoService = HardwareInfoService(processRunner: runner)
-        let privilegedCommandService = PrivilegedCommandService(processRunner: runner)
+        let legacyAuthorizationService = LegacyAuthorizationService(processRunner: runner)
+        let helperInstallationService = HelperInstallationService()
+        let helperConnectionService = HelperConnectionService()
         _gpuService = StateObject(
             wrappedValue: GPUService(
                 processRunner: runner,
                 hardwareInfoService: hardwareInfoService,
-                privilegedCommandService: privilegedCommandService
+                legacyAuthorizationService: legacyAuthorizationService,
+                helperInstallationService: helperInstallationService,
+                helperConnectionService: helperConnectionService
             )
         )
     }
