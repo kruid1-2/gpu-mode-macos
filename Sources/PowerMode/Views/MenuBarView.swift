@@ -3,9 +3,11 @@ import SwiftUI
 
 struct MenuBarView: View {
     @ObservedObject var service: GPUService
+    @ObservedObject var appSettings: AppSettings
+    @ObservedObject var notificationService: NotificationService
 
     var body: some View {
-        Text("当前模式：\(service.currentMode.title)")
+        Text("当前模式：\(service.currentMode == .unknown ? "当前模式未知" : service.currentMode.title)")
 
         if service.isLoading {
             Text("正在处理...")
@@ -51,7 +53,7 @@ struct MenuBarView: View {
         ForEach(GPUMode.switchableCases) { mode in
             Button {
                 Task {
-                    await service.switchMode(mode)
+                    await requestModeSwitch(mode)
                 }
             } label: {
                 Label(modeButtonTitle(mode), systemImage: mode.symbolName)
@@ -61,10 +63,12 @@ struct MenuBarView: View {
 
         Divider()
 
-        Text("当前活动显卡")
-        Text(shortMenuTitle(service.activeGPUDescription))
+        if appSettings.showHardwareStatus {
+            Text("当前活动显卡")
+            Text(shortMenuTitle(service.activeGPUDescription))
+        }
 
-        if !service.detectedGPUs.isEmpty {
+        if appSettings.showHardwareStatus && !service.detectedGPUs.isEmpty {
             Divider()
             Text("检测到的显卡")
             ForEach(service.detectedGPUs, id: \.self) { gpuName in
@@ -72,9 +76,9 @@ struct MenuBarView: View {
             }
         }
 
-        if service.hasExternalDisplay {
+        if appSettings.showExternalDisplayWarning && service.hasExternalDisplay {
             Divider()
-            Text("⚠️ 外接显示器可能会启用独显")
+            Text("外接显示器可能会启用独显")
         }
 
         Divider()
@@ -86,9 +90,14 @@ struct MenuBarView: View {
         }
         .disabled(service.isLoading)
 
-        Button("设置") {
-            NSApp.activate(ignoringOtherApps: true)
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        if #available(macOS 14.0, *) {
+            SettingsLink {
+                Text("设置…")
+            }
+        } else {
+            Button("设置…") {
+                openSettingsWindow()
+            }
         }
 
         Divider()
@@ -101,6 +110,30 @@ struct MenuBarView: View {
     private func modeButtonTitle(_ mode: GPUMode) -> String {
         service.currentMode == mode ? "✓ \(mode.title)" : mode.title
     }
+
+    @MainActor
+    private func requestModeSwitch(_ mode: GPUMode) async {
+        if appSettings.confirmDiscreteMode && mode == .discrete {
+            let alert = NSAlert()
+            alert.messageText = "切换到独显优先？"
+            alert.informativeText = "该模式通常会增加耗电和发热。"
+            alert.addButton(withTitle: "切换")
+            alert.addButton(withTitle: "取消")
+
+            guard alert.runModal() == .alertFirstButtonReturn else {
+                return
+            }
+        }
+
+        await service.switchMode(mode)
+    }
+
+    private func openSettingsWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
+            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+    }
 }
 
 private func shortMenuTitle(_ title: String) -> String {
@@ -109,4 +142,46 @@ private func shortMenuTitle(_ title: String) -> String {
     }
 
     return String(title.prefix(27)) + "..."
+}
+
+struct MenuBarStatusLabel: View {
+    @ObservedObject var service: GPUService
+    @ObservedObject var appSettings: AppSettings
+
+    var body: some View {
+        switch appSettings.menuBarDisplayStyle {
+        case .iconOnly:
+            Image(systemName: symbolName)
+                .accessibilityLabel("GPU Mode，当前\(modeTitle)")
+        case .iconAndMode:
+            Label(modeTitle, systemImage: symbolName)
+        case .modeOnly:
+            Text(modeTitle)
+        }
+    }
+
+    private var modeTitle: String {
+        service.currentMode.shortTitle
+    }
+
+    private var symbolName: String {
+        if service.isLoading {
+            return "hourglass"
+        }
+
+        if service.lastError != nil {
+            return "exclamationmark.triangle"
+        }
+
+        switch appSettings.menuBarIconStyle {
+        case .automatic:
+            return service.currentMode.menuBarSymbolName
+        case .gauge:
+            return "gauge.with.dots.needle.50percent"
+        case .display:
+            return "display"
+        case .bolt:
+            return "bolt"
+        }
+    }
 }

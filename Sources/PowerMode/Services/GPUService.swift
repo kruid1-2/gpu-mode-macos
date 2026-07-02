@@ -11,6 +11,7 @@ final class GPUService: ObservableObject {
     @Published private(set) var detectedGPUs: [String] = []
     @Published private(set) var activeGPUDescription = "无法可靠判断"
     @Published private(set) var hasExternalDisplay = false
+    @Published private(set) var architecture = "尚未检测"
     @Published private(set) var lastError: String?
     @Published private(set) var compatibilityMessage = "正在检测兼容性..."
     @Published private(set) var lastRefreshed: Date?
@@ -19,10 +20,12 @@ final class GPUService: ObservableObject {
     @Published private(set) var pendingModeForAuthorization: GPUMode?
 
     private let processRunner: ProcessRunner
+    private let appSettings: AppSettings
     private let hardwareInfoService: HardwareInfoService
     private let legacyAuthorizationService: LegacyAuthorizationService
     private let helperInstallationService: HelperInstallationService
     private let helperConnectionService: HelperConnectionService
+    private let notificationService: NotificationService
     private var didAutoRefresh = false
 
     var menuBarTitle: String {
@@ -39,23 +42,23 @@ final class GPUService: ObservableObject {
     }
 
     init(
+        appSettings: AppSettings,
         processRunner: ProcessRunner,
         hardwareInfoService: HardwareInfoService,
         legacyAuthorizationService: LegacyAuthorizationService,
         helperInstallationService: HelperInstallationService,
-        helperConnectionService: HelperConnectionService
+        helperConnectionService: HelperConnectionService,
+        notificationService: NotificationService
     ) {
+        self.appSettings = appSettings
         self.processRunner = processRunner
         self.hardwareInfoService = hardwareInfoService
         self.legacyAuthorizationService = legacyAuthorizationService
         self.helperInstallationService = helperInstallationService
         self.helperConnectionService = helperConnectionService
+        self.notificationService = notificationService
 
-        if UserDefaults.standard.object(forKey: SettingsKeys.refreshOnLaunch) == nil {
-            UserDefaults.standard.set(true, forKey: SettingsKeys.refreshOnLaunch)
-        }
-
-        if UserDefaults.standard.bool(forKey: SettingsKeys.refreshOnLaunch) {
+        if appSettings.refreshOnLaunch {
             Task { [weak self] in
                 await self?.refreshIfNeeded()
             }
@@ -251,6 +254,7 @@ final class GPUService: ObservableObject {
 
     private func apply(_ hardwareInfo: HardwareInfo) {
         isSupported = hardwareInfo.isSupported
+        architecture = hardwareInfo.architecture.isEmpty ? "尚未检测" : hardwareInfo.architecture
         compatibilityMessage = hardwareInfo.compatibilityMessage
         detectedGPUs = hardwareInfo.detectedGPUs
         activeGPUDescription = hardwareInfo.activeGPUDescription
@@ -270,6 +274,7 @@ final class GPUService: ObservableObject {
         if verifiedMode == expectedMode {
             currentMode = verifiedMode
             statusMessage = "已切换至\(expectedMode.title)"
+            await notificationService.sendSuccessNotification(for: expectedMode, appSettings: appSettings)
         } else {
             currentMode = verifiedMode
             lastError = "命令已执行，但系统返回的模式与预期不一致。"
@@ -337,8 +342,4 @@ enum GPUServiceError: LocalizedError, Sendable {
             "当前 macOS 或机型可能不支持此功能。"
         }
     }
-}
-
-enum SettingsKeys {
-    static let refreshOnLaunch = "refreshOnLaunch"
 }

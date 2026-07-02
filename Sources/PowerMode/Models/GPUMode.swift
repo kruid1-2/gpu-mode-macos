@@ -51,6 +51,19 @@ enum GPUMode: Int, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    var shortTitle: String {
+        switch self {
+        case .integrated:
+            "集显"
+        case .discrete:
+            "独显"
+        case .automatic:
+            "自动"
+        case .unknown:
+            "未知"
+        }
+    }
+
     var subtitle: String {
         switch self {
         case .integrated:

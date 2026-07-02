@@ -8,6 +8,8 @@ APP_DISPLAY_NAME="GPU Mode"
 BUNDLE_ID="local.gpumode.control"
 HELPER_BUNDLE_ID="local.gpumode.control.helper"
 MIN_SYSTEM_VERSION="13.0"
+APP_VERSION="1.1.0"
+APP_BUILD="12"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/$APP_DISPLAY_NAME.app"
@@ -49,6 +51,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$APP_DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
   <string>$APP_DISPLAY_NAME</string>
+  <key>CFBundleShortVersionString</key>
+  <string>$APP_VERSION</string>
+  <key>CFBundleVersion</key>
+  <string>$APP_BUILD</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>LSMinimumSystemVersion</key>
