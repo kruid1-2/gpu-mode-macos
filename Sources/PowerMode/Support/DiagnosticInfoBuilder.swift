@@ -10,6 +10,9 @@ enum DiagnosticInfoBuilder {
         let gpus = service.detectedGPUs.isEmpty
             ? "- 尚未检测"
             : service.detectedGPUs.map { "- \($0)" }.joined(separator: "\n")
+        let discreteClients = service.discreteGPUClients.isEmpty
+            ? "- 未检测到"
+            : service.discreteGPUClients.map { "- \($0)" }.joined(separator: "\n")
         let lastError = service.lastError?.isEmpty == false ? service.lastError! : "无"
 
         return """
@@ -26,6 +29,11 @@ enum DiagnosticInfoBuilder {
 
         运行状态：
         当前切换策略：\(service.currentMode.title)
+        lowpowermode: \(service.lowPowerModeStatusText)
+        gpuswitch: \(service.gpuSwitchStatusText)
+        当前活动显卡：\(service.activeGPUDescription)
+        独显占用：
+        \(discreteClients)
         外接显示器：\(service.hasExternalDisplay ? "是" : "否")
         开机启动：\(launchAtLoginStatus.title)
         授权方式：\(service.helperStatus == .enabled ? "特权助手" : "AppleScript 管理员授权")

@@ -4,6 +4,7 @@ struct HardwareInfo: Sendable {
     let architecture: String
     let detectedGPUs: [String]
     let activeGPUCandidates: [String]
+    let discreteGPUClients: [String]
     let hasIntelGPU: Bool
     let hasAMDGPU: Bool
     let hasExternalDisplay: Bool
@@ -42,6 +43,13 @@ struct HardwareInfo: Sendable {
 
         return activeGPUCandidates.joined(separator: " / ")
     }
+
+    var hasActiveDiscreteGPU: Bool {
+        !discreteGPUClients.isEmpty || activeGPUCandidates.contains { gpuName in
+            gpuName.localizedCaseInsensitiveContains("AMD")
+                || gpuName.localizedCaseInsensitiveContains("Radeon")
+        }
+    }
 }
 
 final class HardwareInfoService: Sendable {
@@ -54,16 +62,19 @@ final class HardwareInfoService: Sendable {
     func load() async -> HardwareInfo {
         async let architectureResult = readArchitecture()
         async let displayResult = readDisplayInfo()
+        async let muxClientsResult = readDiscreteGPUClients()
         async let pmsetHasGPUSwitchResult = readGPUSwitchSupport()
 
         let architecture = await architectureResult
         let displayInfo = await displayResult
+        let muxClients = await muxClientsResult
         let hasGPUSwitch = await pmsetHasGPUSwitchResult
 
         return HardwareInfo(
             architecture: architecture,
             detectedGPUs: displayInfo.detectedGPUs,
             activeGPUCandidates: displayInfo.activeGPUCandidates,
+            discreteGPUClients: muxClients,
             hasIntelGPU: displayInfo.hasIntelGPU,
             hasAMDGPU: displayInfo.hasAMDGPU,
             hasExternalDisplay: displayInfo.hasExternalDisplay,
@@ -88,6 +99,19 @@ final class HardwareInfoService: Sendable {
             return result.standardOutput.contains("gpuswitch")
         } catch {
             return false
+        }
+    }
+
+    private func readDiscreteGPUClients() async -> [String] {
+        do {
+            let result = try await processRunner.run(
+                "/usr/sbin/ioreg",
+                arguments: ["-r", "-c", "AppleMuxControl", "-l"],
+                timeout: 5
+            )
+            return Self.parseDiscreteGPUClients(from: result.standardOutput)
+        } catch {
+            return []
         }
     }
 
@@ -167,6 +191,30 @@ final class HardwareInfoService: Sendable {
             supportsAutomaticGraphicsSwitching: supportsSwitching,
             warningMessage: warningMessage
         )
+    }
+
+    static func parseDiscreteGPUClients(from output: String) -> [String] {
+        guard let lineRange = output.range(of: #""task-runtime"\s*=\s*\([^\n]*\)"#, options: .regularExpression),
+              let regex = try? NSRegularExpression(pattern: #""[0-9]+,[0-9]+,([^"]+)""#) else {
+            return []
+        }
+
+        let line = String(output[lineRange])
+        let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
+        var clients: [String] = []
+
+        for match in regex.matches(in: line, range: nsRange) {
+            guard let range = Range(match.range(at: 1), in: line) else {
+                continue
+            }
+
+            let client = String(line[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !client.isEmpty && !clients.contains(client) {
+                clients.append(client)
+            }
+        }
+
+        return clients
     }
 }
 

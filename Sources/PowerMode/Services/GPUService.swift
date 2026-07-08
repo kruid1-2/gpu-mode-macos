@@ -2,14 +2,28 @@ import AppKit
 import Foundation
 import GPUModeShared
 
+private struct PowerSettingsStatus: Sendable {
+    let gpuMode: GPUMode
+    let gpuSwitchValue: Int?
+    let lowPowerModeValue: Int?
+
+    var summary: String {
+        "lowpowermode: \(lowPowerModeValue.map(String.init) ?? "未检测到")，gpuswitch: \(gpuSwitchValue.map(String.init) ?? "未检测到")"
+    }
+}
+
 @MainActor
 final class GPUService: ObservableObject {
     @Published private(set) var currentMode: GPUMode = .unknown
+    @Published private(set) var currentGPUSwitchValue: Int?
+    @Published private(set) var currentLowPowerModeValue: Int?
     @Published private(set) var isLoading = false
     @Published private(set) var isSupported = false
     @Published private(set) var statusMessage = "正在读取状态..."
     @Published private(set) var detectedGPUs: [String] = []
     @Published private(set) var activeGPUDescription = "无法可靠判断"
+    @Published private(set) var discreteGPUClients: [String] = []
+    @Published private(set) var integratedModeWarning: String?
     @Published private(set) var hasExternalDisplay = false
     @Published private(set) var architecture = "尚未检测"
     @Published private(set) var lastError: String?
@@ -39,6 +53,18 @@ final class GPUService: ObservableObject {
 
     var menuBarSymbolName: String {
         currentMode.menuBarSymbolName
+    }
+
+    var gpuSwitchStatusText: String {
+        currentGPUSwitchValue.map(String.init) ?? "未检测到"
+    }
+
+    var lowPowerModeStatusText: String {
+        currentLowPowerModeValue.map(String.init) ?? "未检测到"
+    }
+
+    var powerStatusSummary: String {
+        "lowpowermode: \(lowPowerModeStatusText)，gpuswitch: \(gpuSwitchStatusText)"
     }
 
     init(
@@ -84,21 +110,24 @@ final class GPUService: ObservableObject {
         statusMessage = "正在刷新状态..."
 
         async let hardwareTask = hardwareInfoService.load()
-        async let modeTask = readCurrentMode()
+        async let statusTask = readPowerSettingsStatus()
 
         refreshHelperStatus()
         let hardwareInfo = await hardwareTask
         apply(hardwareInfo)
 
         do {
-            currentMode = try await modeTask
-            statusMessage = "状态已更新"
+            apply(try await statusTask)
+            statusMessage = "状态已更新（\(powerStatusSummary)）"
         } catch {
             currentMode = .unknown
+            currentGPUSwitchValue = nil
+            currentLowPowerModeValue = nil
             lastError = friendlyMessage(for: error)
             statusMessage = "无法读取当前模式"
         }
 
+        updateIntegratedModeWarning()
         lastRefreshed = Date()
         isLoading = false
     }
@@ -114,7 +143,7 @@ final class GPUService: ObservableObject {
             return
         }
 
-        guard mode != currentMode else {
+        guard !isModeFullyApplied(mode) else {
             statusMessage = "已经是\(mode.title)"
             return
         }
@@ -225,12 +254,22 @@ final class GPUService: ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
+    func isModeFullyApplied(_ mode: GPUMode) -> Bool {
+        guard currentMode == mode,
+              let targetValue = mode.gpuSwitchValue,
+              let expectedLowPowerModeValue = GPUModeCommandFactory.lowPowerModeValue(for: targetValue) else {
+            return false
+        }
+
+        return currentLowPowerModeValue == expectedLowPowerModeValue
+    }
+
     private func switchModeUsingLegacyAuthorization(_ mode: GPUMode) async {
         guard !isLoading else {
             return
         }
 
-        guard mode != currentMode else {
+        guard !isModeFullyApplied(mode) else {
             pendingModeForAuthorization = nil
             statusMessage = "已经是\(mode.title)"
             return
@@ -258,48 +297,93 @@ final class GPUService: ObservableObject {
         compatibilityMessage = hardwareInfo.compatibilityMessage
         detectedGPUs = hardwareInfo.detectedGPUs
         activeGPUDescription = hardwareInfo.activeGPUDescription
+        discreteGPUClients = hardwareInfo.discreteGPUClients
         hasExternalDisplay = hardwareInfo.hasExternalDisplay
+        updateIntegratedModeWarning(activeDiscreteGPU: hardwareInfo.hasActiveDiscreteGPU)
 
         if let warningMessage = hardwareInfo.warningMessage {
             lastError = warningMessage
         }
     }
 
+    private func apply(_ status: PowerSettingsStatus) {
+        currentMode = status.gpuMode
+        currentGPUSwitchValue = status.gpuSwitchValue
+        currentLowPowerModeValue = status.lowPowerModeValue
+    }
+
     private func verifySwitchResult(expectedMode: GPUMode) async throws {
-        let verifiedMode = try await readCurrentMode()
+        let verifiedStatus = try await readPowerSettingsStatus()
         let hardwareInfo = await hardwareInfoService.load()
         apply(hardwareInfo)
+        apply(verifiedStatus)
         refreshHelperStatus()
 
-        if verifiedMode == expectedMode {
-            currentMode = verifiedMode
-            statusMessage = "已切换至\(expectedMode.title)"
+        let expectedLowPowerModeValue = expectedMode.gpuSwitchValue.flatMap {
+            GPUModeCommandFactory.lowPowerModeValue(for: $0)
+        }
+        let lowPowerModeMatches = expectedLowPowerModeValue.map {
+            verifiedStatus.lowPowerModeValue == $0
+        } ?? true
+
+        if verifiedStatus.gpuMode == expectedMode && lowPowerModeMatches {
+            statusMessage = "已切换至\(expectedMode.title)（\(verifiedStatus.summary)）"
+            updateIntegratedModeWarning(activeDiscreteGPU: hardwareInfo.hasActiveDiscreteGPU)
             await notificationService.sendSuccessNotification(for: expectedMode, appSettings: appSettings)
         } else {
-            currentMode = verifiedMode
-            lastError = "命令已执行，但系统返回的模式与预期不一致。"
-            statusMessage = "切换结果需要确认"
+            lastError = "命令已执行，但系统返回的 lowpowermode 或 gpuswitch 与预期不一致。"
+            statusMessage = "切换结果需要确认（\(verifiedStatus.summary)）"
+            updateIntegratedModeWarning(activeDiscreteGPU: hardwareInfo.hasActiveDiscreteGPU)
         }
         lastRefreshed = Date()
     }
 
-    private func readCurrentMode() async throws -> GPUMode {
+    private func updateIntegratedModeWarning(activeDiscreteGPU: Bool? = nil) {
+        let inferredDiscreteActivity = activeGPUDescription.localizedCaseInsensitiveContains("AMD")
+            || activeGPUDescription.localizedCaseInsensitiveContains("Radeon")
+        let isDiscreteActive = activeDiscreteGPU ?? inferredDiscreteActivity
+
+        if currentMode == .integrated && isDiscreteActive {
+            if discreteGPUClients.isEmpty {
+                integratedModeWarning = "系统仍在使用独显，通常是外接显示器或其他应用触发。"
+            } else {
+                integratedModeWarning = "独显占用：\(discreteGPUClients.joined(separator: " / "))"
+            }
+        } else {
+            integratedModeWarning = nil
+        }
+    }
+
+    private func readPowerSettingsStatus() async throws -> PowerSettingsStatus {
         let result = try await processRunner.run("/usr/bin/pmset", arguments: ["-g"], timeout: 5)
+        var gpuSwitchValue: Int?
+        var lowPowerModeValue: Int?
 
         for line in result.standardOutput.components(separatedBy: .newlines) {
             let parts = line.split(whereSeparator: { $0 == " " || $0 == "\t" })
-            guard parts.first == "gpuswitch", let rawValue = parts.dropFirst().first else {
+            guard let key = parts.first, let rawValue = parts.dropFirst().first else {
                 continue
             }
 
-            guard let value = Int(rawValue) else {
-                return .unknown
+            switch key {
+            case "gpuswitch":
+                gpuSwitchValue = Int(rawValue)
+            case "lowpowermode":
+                lowPowerModeValue = Int(rawValue)
+            default:
+                continue
             }
-
-            return GPUMode(gpuSwitchValue: value)
         }
 
-        throw GPUServiceError.gpuSwitchNotFound
+        guard let gpuSwitchValue else {
+            throw GPUServiceError.gpuSwitchNotFound
+        }
+
+        return PowerSettingsStatus(
+            gpuMode: GPUMode(gpuSwitchValue: gpuSwitchValue),
+            gpuSwitchValue: gpuSwitchValue,
+            lowPowerModeValue: lowPowerModeValue
+        )
     }
 
     private func friendlyMessage(for error: Error) -> String {

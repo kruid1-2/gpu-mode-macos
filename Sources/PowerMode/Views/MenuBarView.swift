@@ -8,6 +8,8 @@ struct MenuBarView: View {
 
     var body: some View {
         Text("当前模式：\(service.currentMode == .unknown ? "当前模式未知" : service.currentMode.title)")
+        Text("lowpowermode: \(service.lowPowerModeStatusText)")
+        Text("gpuswitch: \(service.gpuSwitchStatusText)")
 
         if service.isLoading {
             Text("正在处理...")
@@ -58,7 +60,7 @@ struct MenuBarView: View {
             } label: {
                 Label(modeButtonTitle(mode), systemImage: mode.symbolName)
             }
-            .disabled(service.isLoading || !service.isSupported || service.currentMode == mode)
+            .disabled(service.isLoading || !service.isSupported || service.isModeFullyApplied(mode))
         }
 
         Divider()
@@ -66,6 +68,11 @@ struct MenuBarView: View {
         if appSettings.showHardwareStatus {
             Text("当前活动显卡")
             Text(shortMenuTitle(service.activeGPUDescription))
+        }
+
+        if let integratedModeWarning = service.integratedModeWarning {
+            Divider()
+            Text(shortMenuTitle(integratedModeWarning))
         }
 
         if appSettings.showHardwareStatus && !service.detectedGPUs.isEmpty {
@@ -108,7 +115,7 @@ struct MenuBarView: View {
     }
 
     private func modeButtonTitle(_ mode: GPUMode) -> String {
-        service.currentMode == mode ? "✓ \(mode.title)" : mode.title
+        service.isModeFullyApplied(mode) ? "✓ \(mode.title)" : mode.title
     }
 
     @MainActor

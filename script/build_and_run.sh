@@ -15,15 +15,36 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/$APP_DISPLAY_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_LAUNCH_DAEMONS="$APP_CONTENTS/Library/LaunchDaemons"
 APP_BINARY="$APP_MACOS/$PRODUCT_NAME"
 HELPER_BINARY="$APP_LAUNCH_DAEMONS/$HELPER_NAME"
 HELPER_PLIST="$APP_LAUNCH_DAEMONS/$HELPER_BUNDLE_ID.plist"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+APP_ICON_NAME="GPUMode"
+APP_ICON_SOURCE="$ROOT_DIR/Sources/PowerMode/Resources/$APP_ICON_NAME.icns"
 
 cd "$ROOT_DIR"
 
-pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
+clean_app_metadata() {
+  xattr -cr "$APP_BUNDLE" >/dev/null 2>&1 || true
+}
+
+stop_app() {
+  pkill -x "$PRODUCT_NAME" >/dev/null 2>&1 || true
+  for _ in {1..30}; do
+    if ! pgrep -x "$PRODUCT_NAME" >/dev/null; then
+      return
+    fi
+    sleep 0.1
+  done
+}
+
+stop_app
+
+if [[ ! -f "$APP_ICON_SOURCE" ]]; then
+  python3 "$ROOT_DIR/script/generate_app_icon.py" "$APP_ICON_SOURCE"
+fi
 
 swift build --product "$PRODUCT_NAME"
 swift build --product "$HELPER_NAME"
@@ -32,9 +53,10 @@ BUILD_BINARY="$BUILD_DIR/$PRODUCT_NAME"
 BUILD_HELPER="$BUILD_DIR/$HELPER_NAME"
 
 rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_MACOS" "$APP_LAUNCH_DAEMONS"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$APP_LAUNCH_DAEMONS"
 cp "$BUILD_BINARY" "$APP_BINARY"
 cp "$BUILD_HELPER" "$HELPER_BINARY"
+cp "$APP_ICON_SOURCE" "$APP_RESOURCES/$APP_ICON_NAME.icns"
 chmod +x "$APP_BINARY"
 chmod +x "$HELPER_BINARY"
 
@@ -51,6 +73,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$APP_DISPLAY_NAME</string>
   <key>CFBundleDisplayName</key>
   <string>$APP_DISPLAY_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>$APP_ICON_NAME</string>
   <key>CFBundleShortVersionString</key>
   <string>$APP_VERSION</string>
   <key>CFBundleVersion</key>
@@ -60,6 +84,8 @@ cat >"$INFO_PLIST" <<PLIST
   <key>LSMinimumSystemVersion</key>
   <string>$MIN_SYSTEM_VERSION</string>
   <key>LSUIElement</key>
+  <true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key>
   <true/>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
@@ -91,7 +117,9 @@ cat >"$HELPER_PLIST" <<PLIST
 </plist>
 PLIST
 
+clean_app_metadata
 /usr/bin/codesign --force --sign - --identifier "$HELPER_BUNDLE_ID" "$HELPER_BINARY"
+clean_app_metadata
 /usr/bin/codesign --force --sign - --identifier "$BUNDLE_ID" "$APP_BUNDLE"
 
 open_app() {
@@ -117,6 +145,8 @@ case "$MODE" in
     open_app
     sleep 1
     pgrep -x "$PRODUCT_NAME" >/dev/null
+    stop_app
+    clean_app_metadata
     ;;
   *)
     echo "usage: $0 [run|--debug|--logs|--telemetry|--verify]" >&2

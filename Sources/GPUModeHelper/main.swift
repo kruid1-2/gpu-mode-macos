@@ -35,16 +35,18 @@ final class GPUModeHelper: NSObject, GPUModeHelperProtocol {
     private let runner = HelperProcessRunner()
 
     func setGPUMode(_ mode: Int, reply: @escaping (Bool, String?) -> Void) {
-        guard let command = GPUModeCommandFactory.setModeCommand(for: mode) else {
+        guard let commands = GPUModeCommandFactory.setModeCommands(for: mode) else {
             reply(false, "拒绝非法显卡模式。")
             return
         }
 
         do {
-            let (_, standardError, exitCode) = try runner.run(command, timeout: 10)
-            guard exitCode == 0 else {
-                reply(false, sanitizeError(standardError, fallback: "pmset 执行失败。"))
-                return
+            for command in commands {
+                let (_, standardError, exitCode) = try runner.run(command, timeout: 10)
+                guard exitCode == 0 else {
+                    reply(false, sanitizeError(standardError, fallback: fallbackMessage(for: command)))
+                    return
+                }
             }
             reply(true, nil)
         } catch {
@@ -78,6 +80,18 @@ final class GPUModeHelper: NSObject, GPUModeHelperProtocol {
     private func sanitizeError(_ message: String, fallback: String) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? fallback : String(trimmed.prefix(160))
+    }
+
+    private func fallbackMessage(for command: GPUModeCommandSpec) -> String {
+        if command.arguments.contains("gpuswitch") {
+            return "当前设备可能不支持显卡切换。"
+        }
+
+        if command.arguments.contains("lowpowermode") {
+            return "低电量模式设置失败。"
+        }
+
+        return "pmset 执行失败。"
     }
 }
 

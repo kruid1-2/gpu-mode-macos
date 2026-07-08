@@ -1,13 +1,13 @@
 # GPU Mode
 
-GPU Mode 是一个面向部分 Intel 双显卡 Mac 的 macOS 菜单栏工具，用于查看并切换系统的显卡使用策略：节能、独显优先和自动切换。
+GPU Mode 是一个面向部分 Intel 双显卡 Mac 的 macOS 菜单栏工具，用于查看并切换系统的电源与显卡使用策略：集显优先、独显优先和自动切换。
 
-English summary: GPU Mode is a macOS menu bar utility for selected Intel Macs with dual GPUs. It reads and switches the system `gpuswitch` mode with clear safety boundaries.
+English summary: GPU Mode is a macOS menu bar utility for selected Intel Macs with dual GPUs. It reads and switches the system `lowpowermode` and `gpuswitch` settings with clear safety boundaries.
 
 ## 主要功能
 
-- 菜单栏查看当前显卡切换策略。
-- 在“节能模式”“性能模式”“自动切换”之间切换。
+- 菜单栏查看当前低电量模式和显卡切换策略。
+- 在“集显优先”“独显优先”“自动切换”之间切换。
 - 显示检测到的显卡、当前活动显卡和外接显示器提示。
 - 原生 macOS 设置面板，支持开机启动、菜单栏显示样式、通知和诊断信息。
 - 可选特权 Helper，减少日常切换时重复输入管理员密码。
@@ -63,27 +63,28 @@ swift build -c release
 ./script/build_and_run.sh --verify
 ```
 
-该脚本会构建 `PowerMode` 和 `GPUModeHelper`，生成本地 `GPU Mode.app`，并使用 ad hoc 签名方便本机调试。脚本不会注册或安装特权 Helper；只有在应用内主动启用 Helper 时，才会调用 macOS 的 ServiceManagement 注册流程。
+该脚本会构建 `PowerMode` 和 `GPUModeHelper`，生成本地 `GPU Mode.app`，并使用 ad hoc 签名方便本机调试。生成的应用包会声明支持 macOS 自动显卡切换，避免菜单栏应用自身无意中唤起独显。脚本不会注册或安装特权 Helper；只有在应用内主动启用 Helper 时，才会调用 macOS 的 ServiceManagement 注册流程。
 
 ## 管理员权限用途
 
-切换显卡策略需要修改系统电源管理设置，本质上会执行固定形式的命令：
+切换策略需要修改系统电源管理设置，本质上会执行固定形式的命令：
 
 ```bash
+/usr/bin/pmset -a lowpowermode <0|1>
 /usr/bin/pmset -a gpuswitch <mode>
 ```
 
-其中 `<mode>` 只能是：
+三种模式对应关系如下：
 
-- `0`：节能模式，优先集成显卡。
-- `1`：性能模式，独显优先。
-- `2`：自动切换。
+- 集显优先：`lowpowermode 1`，`gpuswitch 0`。
+- 独显优先：`lowpowermode 0`，`gpuswitch 1`。
+- 自动切换：`lowpowermode 0`，`gpuswitch 2`。
 
 ## Helper 安全边界
 
 特权 Helper 的目标是减少重复输入管理员密码，不是扩大应用能力。当前安全边界如下：
 
-- Helper 只接受固定的显卡模式参数 `0`、`1`、`2`。
+- Helper 只接受固定的模式参数，并只会写入 `lowpowermode` 的 `0`、`1` 和 `gpuswitch` 的 `0`、`1`、`2`。
 - Helper 不接受任意 shell 命令。
 - Helper 固定调用 `/usr/bin/pmset`。
 - Helper 不保存管理员密码。
@@ -95,11 +96,11 @@ swift build -c release
 
 GPU Mode 不联网，不收集遥测数据，不读取 Apple ID，不读取钥匙串密码，不保存管理员密码。
 
-诊断信息只包含应用版本、macOS 版本、处理器架构、显卡检测结果、当前模式、外接显示器状态、开机启动状态和最近一次应用错误。诊断信息不应包含用户名、主目录路径、设备序列号、Apple ID、密码或无关硬件信息。
+诊断信息只包含应用版本、macOS 版本、处理器架构、显卡检测结果、当前模式、`lowpowermode`、`gpuswitch`、外接显示器状态、开机启动状态和最近一次应用错误。诊断信息不应包含用户名、主目录路径、设备序列号、Apple ID、密码或无关硬件信息。
 
 ## 外接显示器限制
 
-很多 Intel 双显卡 Mac 在连接外接显示器时，macOS 可能会强制启用独立显卡。这是硬件和系统行为限制，不一定能通过 `gpuswitch` 覆盖。GPU Mode 会尽量显示提示，但不能保证外接显示器场景下持续只使用集成显卡。
+`gpuswitch 0` 是系统显卡策略，不是硬件级禁用独显。很多 Intel 双显卡 Mac 在连接外接显示器时，macOS 可能会强制启用独立显卡；部分正在运行的应用也可能继续请求独显。这些是硬件和系统行为限制，不一定能通过 `gpuswitch` 覆盖。GPU Mode 会声明自身支持自动显卡切换，并尽量显示提示，但不能保证所有场景下持续只使用集成显卡。
 
 ## 已知问题
 

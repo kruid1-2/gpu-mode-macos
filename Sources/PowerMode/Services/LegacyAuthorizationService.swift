@@ -1,4 +1,5 @@
 import Foundation
+import GPUModeShared
 
 enum LegacyAuthorizationError: LocalizedError, Sendable {
     case unsupportedMode
@@ -25,18 +26,12 @@ final class LegacyAuthorizationService: Sendable {
     }
 
     func apply(_ mode: GPUMode) async throws {
-        let fixedCommand: String
-        switch mode {
-        case .integrated:
-            fixedCommand = "/usr/bin/pmset -a gpuswitch 0"
-        case .discrete:
-            fixedCommand = "/usr/bin/pmset -a gpuswitch 1"
-        case .automatic:
-            fixedCommand = "/usr/bin/pmset -a gpuswitch 2"
-        case .unknown:
+        guard let targetValue = mode.gpuSwitchValue,
+              let commands = GPUModeCommandFactory.setModeCommands(for: targetValue) else {
             throw LegacyAuthorizationError.unsupportedMode
         }
 
+        let fixedCommand = GPUModeCommandFactory.shellCommandString(for: commands)
         let appleScript = "do shell script \"\(fixedCommand)\" with administrator privileges"
 
         do {

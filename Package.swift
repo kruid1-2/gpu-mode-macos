@@ -20,7 +20,10 @@ let package = Package(
         .executableTarget(
             name: "PowerMode",
             dependencies: ["GPUModeShared"],
-            path: "Sources/PowerMode"
+            path: "Sources/PowerMode",
+            resources: [
+                .process("Resources")
+            ]
         ),
         .executableTarget(
             name: "GPUModeHelper",

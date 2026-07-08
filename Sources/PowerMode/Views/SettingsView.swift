@@ -104,7 +104,7 @@ private struct GeneralSettingsView: View {
 
                 helperControlView
 
-                Text("特权助手只能修改 gpuswitch 的 0、1、2 三个固定值，不能执行其他终端命令，也不会保存管理员密码。")
+                Text("特权助手只能修改 lowpowermode 的 0、1 和 gpuswitch 的 0、1、2 固定值，不能执行其他终端命令，也不会保存管理员密码。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -273,7 +273,7 @@ private struct AboutSettingsView: View {
         Form {
             Section("GPU Mode") {
                 LabeledContent("版本", value: "\(BundleInfo.shortVersion) (\(BundleInfo.buildNumber))")
-                Text("GPU Mode 是一个用于 Intel 双显卡 Mac 的菜单栏工具，可以读取并切换系统的显卡使用策略。")
+                Text("GPU Mode 是一个用于 Intel 双显卡 Mac 的菜单栏工具，可以读取并切换系统的电源与显卡使用策略。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text("GPU Mode 不联网、不收集数据，也不会读取或保存管理员密码。")
@@ -288,6 +288,9 @@ private struct AboutSettingsView: View {
                 LabeledContent("处理器架构", value: service.architecture)
                 LabeledContent("检测到的显卡", value: service.detectedGPUs.isEmpty ? "尚未检测" : service.detectedGPUs.joined(separator: " / "))
                 LabeledContent("当前切换策略", value: service.currentMode.title)
+                LabeledContent("lowpowermode", value: service.lowPowerModeStatusText)
+                LabeledContent("gpuswitch", value: service.gpuSwitchStatusText)
+                LabeledContent("独显占用", value: service.discreteGPUClients.isEmpty ? "未检测到" : service.discreteGPUClients.joined(separator: " / "))
                 LabeledContent("外接显示器", value: service.hasExternalDisplay ? "是" : "否")
                 LabeledContent("设备兼容性", value: service.compatibilityMessage)
                 LabeledContent("管理员执行方式", value: service.helperStatus == .enabled ? "特权助手" : "AppleScript 管理员授权")

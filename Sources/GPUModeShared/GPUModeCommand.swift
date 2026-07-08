@@ -29,6 +29,41 @@ public enum GPUModeCommandFactory {
         )
     }
 
+    public static func lowPowerModeValue(for mode: Int) -> Int? {
+        guard isValidMode(mode) else {
+            return nil
+        }
+
+        return mode == 0 ? 1 : 0
+    }
+
+    public static func setLowPowerModeCommand(for mode: Int) -> GPUModeCommandSpec? {
+        guard let lowPowerModeValue = lowPowerModeValue(for: mode) else {
+            return nil
+        }
+
+        return GPUModeCommandSpec(
+            executablePath: pmsetPath,
+            arguments: ["-a", "lowpowermode", String(lowPowerModeValue)]
+        )
+    }
+
+    public static func setModeCommands(for mode: Int) -> [GPUModeCommandSpec]? {
+        guard let lowPowerCommand = setLowPowerModeCommand(for: mode),
+              let gpuSwitchCommand = setModeCommand(for: mode) else {
+            return nil
+        }
+
+        return [lowPowerCommand, gpuSwitchCommand]
+    }
+
+    public static func shellCommandString(for commands: [GPUModeCommandSpec]) -> String {
+        commands.map { command in
+            ([command.executablePath] + command.arguments).joined(separator: " ")
+        }
+        .joined(separator: "; ")
+    }
+
     public static var getModeCommand: GPUModeCommandSpec {
         GPUModeCommandSpec(
             executablePath: pmsetPath,

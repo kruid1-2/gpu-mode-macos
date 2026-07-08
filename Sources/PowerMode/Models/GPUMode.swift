@@ -67,9 +67,9 @@ enum GPUMode: Int, CaseIterable, Identifiable, Sendable {
     var subtitle: String {
         switch self {
         case .integrated:
-            "优先使用 Intel 集成显卡"
+            "尽量使用 Intel 集成显卡"
         case .discrete:
-            "强制使用 AMD 独立显卡"
+            "优先使用 AMD 独立显卡"
         case .automatic:
             "交给 macOS 自动判断"
         case .unknown:
