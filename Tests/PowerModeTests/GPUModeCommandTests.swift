@@ -46,22 +46,22 @@ final class GPUModeCommandTests: XCTestCase {
         XCTAssertEqual(
             GPUModeCommandFactory.setModeCommands(for: 0),
             [
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "1"]),
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "0"])
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "0"]),
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "1"])
             ]
         )
         XCTAssertEqual(
             GPUModeCommandFactory.setModeCommands(for: 1),
             [
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "0"]),
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "1"])
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "1"]),
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "0"])
             ]
         )
         XCTAssertEqual(
             GPUModeCommandFactory.setModeCommands(for: 2),
             [
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "0"]),
-                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "2"])
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "gpuswitch", "2"]),
+                GPUModeCommandSpec(executablePath: "/usr/bin/pmset", arguments: ["-a", "lowpowermode", "0"])
             ]
         )
     }

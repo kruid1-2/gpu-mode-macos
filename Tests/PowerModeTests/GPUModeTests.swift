@@ -109,4 +109,32 @@ final class GPUModeTests: XCTestCase {
             ["Music", "promecefpluginhost (GPU)"]
         )
     }
+
+    func testIntegratedSwitchIsBlockedByDiscreteGPUClient() {
+        let safety = IntegratedSwitchSafety(
+            discreteGPUClients: ["promecefpluginhost (GPU)"],
+            hasExternalDisplay: false
+        )
+
+        XCTAssertTrue(safety.blockingMessage?.contains("WPS Office") == true)
+        XCTAssertTrue(safety.blockingMessage?.contains("强制切换") == true)
+    }
+
+    func testIntegratedSwitchIsBlockedByExternalDisplay() {
+        let safety = IntegratedSwitchSafety(
+            discreteGPUClients: [],
+            hasExternalDisplay: true
+        )
+
+        XCTAssertTrue(safety.blockingMessage?.contains("外接显示器") == true)
+    }
+
+    func testIntegratedSwitchIsAllowedWhenGPUIsFree() {
+        let safety = IntegratedSwitchSafety(
+            discreteGPUClients: [],
+            hasExternalDisplay: false
+        )
+
+        XCTAssertNil(safety.blockingMessage)
+    }
 }

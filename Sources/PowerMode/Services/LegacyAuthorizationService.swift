@@ -27,11 +27,14 @@ final class LegacyAuthorizationService: Sendable {
 
     func apply(_ mode: GPUMode) async throws {
         guard let targetValue = mode.gpuSwitchValue,
-              let commands = GPUModeCommandFactory.setModeCommands(for: targetValue) else {
+              let gpuSwitchCommand = GPUModeCommandFactory.setModeCommand(for: targetValue),
+              let lowPowerModeCommand = GPUModeCommandFactory.setLowPowerModeCommand(for: targetValue) else {
             throw LegacyAuthorizationError.unsupportedMode
         }
 
-        let fixedCommand = GPUModeCommandFactory.shellCommandString(for: commands)
+        let gpuSwitchShellCommand = GPUModeCommandFactory.shellCommandString(for: [gpuSwitchCommand])
+        let lowPowerModeShellCommand = GPUModeCommandFactory.shellCommandString(for: [lowPowerModeCommand])
+        let fixedCommand = "\(gpuSwitchShellCommand) && { \(lowPowerModeShellCommand) || true; }"
         let appleScript = "do shell script \"\(fixedCommand)\" with administrator privileges"
 
         do {

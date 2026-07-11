@@ -30,15 +30,15 @@ final class HelperConnectionService: @unchecked Sendable {
             throw HelperConnectionError.invalidMode
         }
 
-        try await performWithRetry { proxy in
-            try await self.callSetMode(proxy: proxy, mode: mode)
-        }
+        try await callSetMode(mode: mode)
     }
 
     func getCurrentMode() async throws -> Int {
-        try await performWithRetry { proxy in
-            try await self.callGetCurrentMode(proxy: proxy)
-        }
+        try await callGetCurrentMode(timeout: 5)
+    }
+
+    func verifyConnection() async throws {
+        _ = try await callGetCurrentMode(timeout: 2)
     }
 
     func resetConnection() {
@@ -47,34 +47,6 @@ final class HelperConnectionService: @unchecked Sendable {
         connection = nil
         lock.unlock()
         oldConnection?.invalidate()
-    }
-
-    private func performWithRetry<T>(_ operation: @escaping (GPUModeHelperProtocol) async throws -> T) async throws -> T {
-        do {
-            return try await operation(remoteProxy())
-        } catch {
-            resetConnection()
-            do {
-                return try await operation(remoteProxy())
-            } catch let retryError as HelperConnectionError {
-                throw retryError
-            } catch {
-                throw HelperConnectionError.connectionFailed
-            }
-        }
-    }
-
-    private func remoteProxy() throws -> GPUModeHelperProtocol {
-        let activeConnection = makeConnectionIfNeeded()
-        let proxy = activeConnection.remoteObjectProxyWithErrorHandler { [weak self] _ in
-            self?.resetConnection()
-        }
-
-        guard let helperProxy = proxy as? GPUModeHelperProtocol else {
-            throw HelperConnectionError.connectionFailed
-        }
-
-        return helperProxy
     }
 
     private func makeConnectionIfNeeded() -> NSXPCConnection {
@@ -102,14 +74,28 @@ final class HelperConnectionService: @unchecked Sendable {
         return newConnection
     }
 
-    private func callSetMode(proxy: GPUModeHelperProtocol, mode: Int) async throws {
+    private func callSetMode(mode: Int) async throws {
+        let activeConnection = makeConnectionIfNeeded()
         try await withCheckedThrowingContinuation { continuation in
             let resumer = ContinuationResumer<Void>(continuation)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 8) {
-                resumer.resume(throwing: HelperConnectionError.timedOut)
+            let proxy = activeConnection.remoteObjectProxyWithErrorHandler { [weak self] _ in
+                if resumer.resume(throwing: HelperConnectionError.connectionFailed) {
+                    self?.resetConnection()
+                }
             }
 
-            proxy.setGPUMode(mode) { success, message in
+            guard let helperProxy = proxy as? GPUModeHelperProtocol else {
+                resumer.resume(throwing: HelperConnectionError.connectionFailed)
+                return
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + 8) { [weak self] in
+                if resumer.resume(throwing: HelperConnectionError.timedOut) {
+                    self?.resetConnection()
+                }
+            }
+
+            helperProxy.setGPUMode(mode) { success, message in
                 if success {
                     resumer.resume(returning: ())
                 } else {
@@ -119,14 +105,28 @@ final class HelperConnectionService: @unchecked Sendable {
         }
     }
 
-    private func callGetCurrentMode(proxy: GPUModeHelperProtocol) async throws -> Int {
-        try await withCheckedThrowingContinuation { continuation in
+    private func callGetCurrentMode(timeout: TimeInterval) async throws -> Int {
+        let activeConnection = makeConnectionIfNeeded()
+        return try await withCheckedThrowingContinuation { continuation in
             let resumer = ContinuationResumer<Int>(continuation)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
-                resumer.resume(throwing: HelperConnectionError.timedOut)
+            let proxy = activeConnection.remoteObjectProxyWithErrorHandler { [weak self] _ in
+                if resumer.resume(throwing: HelperConnectionError.connectionFailed) {
+                    self?.resetConnection()
+                }
             }
 
-            proxy.getCurrentMode { mode, message in
+            guard let helperProxy = proxy as? GPUModeHelperProtocol else {
+                resumer.resume(throwing: HelperConnectionError.connectionFailed)
+                return
+            }
+
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [weak self] in
+                if resumer.resume(throwing: HelperConnectionError.timedOut) {
+                    self?.resetConnection()
+                }
+            }
+
+            helperProxy.getCurrentMode { mode, message in
                 if GPUModeCommandFactory.isValidMode(mode) {
                     resumer.resume(returning: mode)
                 } else {
@@ -146,23 +146,29 @@ private final class ContinuationResumer<T: Sendable>: @unchecked Sendable {
         self.continuation = continuation
     }
 
-    func resume(returning value: T) {
+    @discardableResult
+    func resume(returning value: T) -> Bool {
         lock.lock()
-        defer { lock.unlock() }
         guard !didResume else {
-            return
+            lock.unlock()
+            return false
         }
         didResume = true
+        lock.unlock()
         continuation.resume(returning: value)
+        return true
     }
 
-    func resume(throwing error: Error) {
+    @discardableResult
+    func resume(throwing error: Error) -> Bool {
         lock.lock()
-        defer { lock.unlock() }
         guard !didResume else {
-            return
+            lock.unlock()
+            return false
         }
         didResume = true
+        lock.unlock()
         continuation.resume(throwing: error)
+        return true
     }
 }

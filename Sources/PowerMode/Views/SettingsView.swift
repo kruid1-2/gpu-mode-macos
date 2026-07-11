@@ -222,6 +222,10 @@ private struct GeneralSettingsView: View {
             Text("应用包中没有找到特权助手文件。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        case .unavailable(let message):
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 }

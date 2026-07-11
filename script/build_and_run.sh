@@ -9,7 +9,7 @@ BUNDLE_ID="local.gpumode.control"
 HELPER_BUNDLE_ID="local.gpumode.control.helper"
 MIN_SYSTEM_VERSION="13.0"
 APP_VERSION="1.1.0"
-APP_BUILD="12"
+APP_BUILD="16"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$ROOT_DIR/$APP_DISPLAY_NAME.app"
@@ -107,8 +107,6 @@ cat >"$HELPER_PLIST" <<PLIST
     <key>$HELPER_BUNDLE_ID</key>
     <true/>
   </dict>
-  <key>RunAtLoad</key>
-  <true/>
   <key>AssociatedBundleIdentifiers</key>
   <array>
     <string>$BUNDLE_ID</string>

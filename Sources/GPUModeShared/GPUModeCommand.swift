@@ -49,12 +49,12 @@ public enum GPUModeCommandFactory {
     }
 
     public static func setModeCommands(for mode: Int) -> [GPUModeCommandSpec]? {
-        guard let lowPowerCommand = setLowPowerModeCommand(for: mode),
-              let gpuSwitchCommand = setModeCommand(for: mode) else {
+        guard let gpuSwitchCommand = setModeCommand(for: mode),
+              let lowPowerCommand = setLowPowerModeCommand(for: mode) else {
             return nil
         }
 
-        return [lowPowerCommand, gpuSwitchCommand]
+        return [gpuSwitchCommand, lowPowerCommand]
     }
 
     public static func shellCommandString(for commands: [GPUModeCommandSpec]) -> String {

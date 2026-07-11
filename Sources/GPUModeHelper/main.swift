@@ -42,8 +42,12 @@ final class GPUModeHelper: NSObject, GPUModeHelperProtocol {
 
         do {
             for command in commands {
-                let (_, standardError, exitCode) = try runner.run(command, timeout: 10)
+                let timeout: TimeInterval = command.arguments.contains("gpuswitch") ? 5 : 3
+                let (_, standardError, exitCode) = try runner.run(command, timeout: timeout)
                 guard exitCode == 0 else {
+                    if command.arguments.contains("lowpowermode") {
+                        continue
+                    }
                     reply(false, sanitizeError(standardError, fallback: fallbackMessage(for: command)))
                     return
                 }

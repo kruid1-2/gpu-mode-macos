@@ -98,12 +98,10 @@ struct MenuBarView: View {
         .disabled(service.isLoading)
 
         if #available(macOS 14.0, *) {
-            SettingsLink {
-                Text("设置…")
-            }
+            ModernSettingsButton()
         } else {
             Button("设置…") {
-                openSettingsWindow()
+                SettingsWindowPresenter.showLegacySettings()
             }
         }
 
@@ -120,6 +118,25 @@ struct MenuBarView: View {
 
     @MainActor
     private func requestModeSwitch(_ mode: GPUMode) async {
+        if mode == .integrated {
+            let safety = await service.checkIntegratedSwitchSafety()
+            if let blockingMessage = safety.blockingMessage {
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "独显仍被占用"
+                alert.informativeText = blockingMessage
+                alert.addButton(withTitle: "取消")
+                alert.addButton(withTitle: "仍然强制切换")
+
+                guard alert.runModal() == .alertSecondButtonReturn else {
+                    return
+                }
+            }
+
+            await service.switchMode(mode, allowUnsafeIntegratedSwitch: true)
+            return
+        }
+
         if appSettings.confirmDiscreteMode && mode == .discrete {
             let alert = NSAlert()
             alert.messageText = "切换到独显优先？"
@@ -135,10 +152,47 @@ struct MenuBarView: View {
         await service.switchMode(mode)
     }
 
-    private func openSettingsWindow() {
+}
+
+@available(macOS 14.0, *)
+private struct ModernSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("设置…") {
+            NSApp.activate(ignoringOtherApps: true)
+            openSettings()
+            SettingsWindowPresenter.bringSettingsWindowToFront()
+        }
+    }
+}
+
+@MainActor
+private enum SettingsWindowPresenter {
+    static func showLegacySettings() {
         NSApp.activate(ignoringOtherApps: true)
         if !NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil) {
             NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+        }
+        bringSettingsWindowToFront()
+    }
+
+    static func bringSettingsWindowToFront(attemptsRemaining: Int = 4) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            let settingsWindow = NSApp.windows.first { window in
+                window.styleMask.contains(.titled) && window.canBecomeKey
+            }
+
+            if let settingsWindow {
+                if settingsWindow.isMiniaturized {
+                    settingsWindow.deminiaturize(nil)
+                }
+                NSApp.activate(ignoringOtherApps: true)
+                settingsWindow.makeKeyAndOrderFront(nil)
+                settingsWindow.orderFrontRegardless()
+            } else if attemptsRemaining > 1 {
+                bringSettingsWindowToFront(attemptsRemaining: attemptsRemaining - 1)
+            }
         }
     }
 }

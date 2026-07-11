@@ -132,7 +132,7 @@ final class GPUService: ObservableObject {
         isLoading = false
     }
 
-    func switchMode(_ mode: GPUMode) async {
+    func switchMode(_ mode: GPUMode, allowUnsafeIntegratedSwitch: Bool = false) async {
         guard !isLoading else {
             return
         }
@@ -154,7 +154,23 @@ final class GPUService: ObservableObject {
             return
         }
 
+        if mode == .integrated && !allowUnsafeIntegratedSwitch {
+            let safety = await checkIntegratedSwitchSafety()
+            if let blockingMessage = safety.blockingMessage {
+                integratedModeWarning = blockingMessage
+                statusMessage = "已暂停切换，请先处理独显占用"
+                return
+            }
+        }
+
         refreshHelperStatus()
+
+        if case .unavailable = helperStatus {
+            helperInstallationService.removeUnsupportedRegistrationIfNeeded()
+            helperConnectionService.resetConnection()
+            await switchModeUsingLegacyAuthorization(mode)
+            return
+        }
 
         guard helperStatus == .enabled else {
             pendingModeForAuthorization = mode
@@ -168,6 +184,7 @@ final class GPUService: ObservableObject {
         statusMessage = "正在切换至\(mode.title)..."
 
         do {
+            try await prepareHelperForUse()
             try await helperConnectionService.setMode(targetValue)
             try await verifySwitchResult(expectedMode: mode)
             pendingModeForAuthorization = nil
@@ -177,6 +194,17 @@ final class GPUService: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    func checkIntegratedSwitchSafety() async -> IntegratedSwitchSafety {
+        isLoading = true
+        lastError = nil
+        statusMessage = "正在检查独显占用..."
+        let safety = await hardwareInfoService.loadIntegratedSwitchSafety()
+        discreteGPUClients = safety.discreteGPUClients
+        hasExternalDisplay = safety.hasExternalDisplay
+        isLoading = false
+        return safety
     }
 
     func enableHelper() async {
@@ -244,6 +272,10 @@ final class GPUService: ObservableObject {
 
     func refreshHelperStatus() {
         helperStatus = helperInstallationService.status()
+        if case .unavailable = helperStatus {
+            helperInstallationService.removeUnsupportedRegistrationIfNeeded()
+            helperConnectionService.resetConnection()
+        }
         helperMessage = helperStatus.explanation
     }
 
@@ -289,6 +321,19 @@ final class GPUService: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    private func prepareHelperForUse() async throws {
+        try helperInstallationService.refreshRegistrationIfNeeded()
+        helperConnectionService.resetConnection()
+
+        do {
+            try await helperConnectionService.verifyConnection()
+        } catch {
+            helperConnectionService.resetConnection()
+            try helperInstallationService.refreshRegistration()
+            try await helperConnectionService.verifyConnection()
+        }
     }
 
     private func apply(_ hardwareInfo: HardwareInfo) {

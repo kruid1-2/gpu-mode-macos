@@ -1,4 +1,30 @@
+import CoreGraphics
 import Foundation
+
+struct IntegratedSwitchSafety: Sendable {
+    let discreteGPUClients: [String]
+    let hasExternalDisplay: Bool
+
+    var blockingMessage: String? {
+        if hasExternalDisplay {
+            return "检测到外接显示器。当前机型的外接显示输出通常依赖独显，请断开外接显示器后再切换到集显优先。"
+        }
+
+        if !discreteGPUClients.isEmpty {
+            let names = discreteGPUClients.map(Self.friendlyClientName)
+            return "以下程序仍在使用独显：\(names.joined(separator: " / "))。请完全退出这些程序后再切换；也可以选择强制切换，但可能短暂黑屏或卡顿。"
+        }
+
+        return nil
+    }
+
+    private static func friendlyClientName(_ name: String) -> String {
+        if name.localizedCaseInsensitiveContains("promecefpluginhost") {
+            return "WPS Office"
+        }
+        return name
+    }
+}
 
 struct HardwareInfo: Sendable {
     let architecture: String
@@ -84,6 +110,14 @@ final class HardwareInfoService: Sendable {
         )
     }
 
+    func loadIntegratedSwitchSafety() async -> IntegratedSwitchSafety {
+        let clients = await readDiscreteGPUClients()
+        return IntegratedSwitchSafety(
+            discreteGPUClients: clients,
+            hasExternalDisplay: Self.hasExternalDisplay
+        )
+    }
+
     private func readArchitecture() async -> String {
         do {
             let result = try await processRunner.run("/usr/bin/uname", arguments: ["-m"], timeout: 3)
@@ -113,6 +147,21 @@ final class HardwareInfoService: Sendable {
         } catch {
             return []
         }
+    }
+
+    private static var hasExternalDisplay: Bool {
+        var displayCount: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &displayCount) == .success,
+              displayCount > 0 else {
+            return false
+        }
+
+        var displayIDs = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
+        guard CGGetOnlineDisplayList(displayCount, &displayIDs, &displayCount) == .success else {
+            return false
+        }
+
+        return displayIDs.prefix(Int(displayCount)).contains { CGDisplayIsBuiltin($0) == 0 }
     }
 
     private func readDisplayInfo() async -> DisplayInfoParseResult {

@@ -7,7 +7,7 @@ echo "目标：尽量只使用 Intel 集成显卡，降低功耗。"
 echo
 
 if ! /usr/bin/osascript <<'APPLESCRIPT'
-do shell script "/usr/bin/pmset -a lowpowermode 1; /usr/bin/pmset -a gpuswitch 0" with administrator privileges
+do shell script "/usr/bin/pmset -a gpuswitch 0 && { /usr/bin/pmset -a lowpowermode 1 || true; }" with administrator privileges
 APPLESCRIPT
 then
   echo
@@ -18,6 +18,14 @@ echo
 echo "已设置为节能模式。"
 echo "当前电源与显卡设置："
 /usr/bin/pmset -g | /usr/bin/grep -E "lowpowermode|gpuswitch" || echo "未检测到 lowpowermode 或 gpuswitch。"
+mode=$(/usr/bin/pmset -g | /usr/bin/awk '/gpuswitch/ { print $2; exit }')
+low_power=$(/usr/bin/pmset -g | /usr/bin/awk '/lowpowermode/ { print $2; exit }')
+if [[ "$mode" != "0" ]]; then
+  echo "提示：当前设备可能不支持显卡切换，或系统拒绝了 gpuswitch 0。"
+fi
+if [[ "$low_power" != "1" ]]; then
+  echo "提示：低电量模式未开启，当前设备或电源状态可能不支持 lowpowermode。"
+fi
 echo
 echo "提示：如果连接外接显示器，macOS 可能仍需要使用独立显卡。"
 echo
